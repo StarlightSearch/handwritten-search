@@ -13,7 +13,8 @@ uvicorn = "^0.32.1"
 pydantic = "^2.10.3"
 embed-anything-gpu = "^0.4.16"
 qwen-vl-utils = "^0.0.8"
-
+streamlit = "^1.40.2"
+pillow = "^11.0.0"
 
 [build-system]
 requires = ["poetry-core"]

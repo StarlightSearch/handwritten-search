@@ -171,6 +171,16 @@ async def delete_collection(request: CollectionDelete):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/qdrant/collections")
+async def list_collections():
+    try:
+        collections = adapter.client.get_collections().collections
+        collection_names = [collection.name for collection in collections]
+        return {"collections": collection_names}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
 
