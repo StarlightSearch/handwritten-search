@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import os
 from PIL import Image
+from streamlit_file_browser import st_file_browser
 
 API_URL = "http://localhost:8000"
 
@@ -63,6 +64,7 @@ tab1, tab2 = st.tabs(["Process Images", "Search"])
 # Process Images Tab
 with tab1:
     st.header("Process Images")
+    
     uploaded_file = st.file_uploader("Choose an image", type=["png", "jpg", "jpeg"])
     
     if uploaded_file is not None:
@@ -91,7 +93,7 @@ with tab1:
                 st.error(response.json()["detail"])
             
             # Clean up temporary file
-            os.remove(temp_path)
+            # os.remove(temp_path)
 
 # Search Tab
 with tab2:

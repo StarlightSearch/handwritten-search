@@ -8,7 +8,8 @@ from qwen_vl_utils import process_vision_info
 from embed_anything import embed_query, EmbeddingModel, ONNXModel, WhichModel
 
 from api.qdrant_adapter import QdrantAdapter
-
+from qdrant_client.models import SparseVector
+import numpy as np
 app = FastAPI()
 
 # Initialize models
@@ -139,10 +140,20 @@ async def process_file(request: FileProcess):
 @app.post("/search")
 async def search(request: SearchQuery):
     try:
-        query_embedding = embed_query([request.query], embedding_model)
-        results = adapter.search(
+        dense_query_embedding = embed_query([request.query], embedding_model)
+        sparse_query_embedding = embed_query([request.query], sparse_model)
+        query_sparse_embeddings = get_sparse_embedding(sparse_query_embedding[0].embedding)
+
+        query_sparse_embeddings = SparseVector(
+        indices=query_sparse_embeddings["indices"],
+        values=query_sparse_embeddings["values"],
+    )
+
+
+        results = adapter.search_hybrid(
             collection_name=request.collection_name,
-            query_vector=query_embedding[0].embedding,
+            query_vector=dense_query_embedding[0].embedding,
+            query_sparse_vector=query_sparse_embeddings,
         )
 
         return {
@@ -185,3 +196,22 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+def get_sparse_embedding(embedding):
+    # Convert the embedding to a NumPy array
+    embedding_array = np.array(embedding)
+
+    # Get indices of non-zero elements
+    non_zero_indices = np.nonzero(embedding_array)[0]
+
+    # Get values of non-zero elements
+    non_zero_values = embedding_array[non_zero_indices]
+
+    # Create a dictionary with lists of indices and values
+    non_zero_terms = {
+        "indices": non_zero_indices.tolist(),
+        "values": non_zero_values.tolist()
+    }
+
+    return non_zero_terms
