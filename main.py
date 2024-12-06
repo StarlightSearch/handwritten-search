@@ -7,7 +7,7 @@ from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
 from embed_anything import embed_query, EmbeddingModel, ONNXModel, WhichModel
 
-from qdrant_adapter import QdrantAdapter
+from api.qdrant_adapter import QdrantAdapter
 
 app = FastAPI()
 
@@ -46,6 +46,10 @@ class SearchQuery(BaseModel):
     collection_name: str
 
 
+class CollectionDelete(BaseModel):
+    collection_name: str
+
+
 @app.post("/collections/create")
 async def create_collection(request: CollectionCreate):
     try:
@@ -77,7 +81,7 @@ async def process_file(request: FileProcess):
                         "type": "image",
                         "image": request.file_path,
                     },
-                    {"type": "text", "text": "Transcribe this image"},
+                    {"type": "text", "text": "Transcribe this image. Just give the transcription, no other information."},
                 ],
             }
         ]
@@ -151,6 +155,18 @@ async def search(request: SearchQuery):
                 for result in results.points
             ]
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/collections/delete")
+async def delete_collection(request: CollectionDelete):
+    try:
+        if not adapter.client.collection_exists(request.collection_name):
+            raise HTTPException(status_code=404, detail="Collection does not exist")
+        
+        adapter.client.delete_collection(collection_name=request.collection_name)
+        return {"message": f"Collection {request.collection_name} deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

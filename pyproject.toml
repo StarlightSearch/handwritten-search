@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "search-handwritten"
+version = "0.1.0"
+description = "An API to search handwritten applications. Uses VLM as OCR model and EmbedAnything for embedding generation and Qdrant for vector database"
+authors = ["Akshay Ballal <arballal95@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+qdrant-client = "^1.12.1"
+fastapi = "^0.115.6"
+uvicorn = "^0.32.1"
+pydantic = "^2.10.3"
+embed-anything-gpu = "^0.4.16"
+qwen-vl-utils = "^0.0.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
