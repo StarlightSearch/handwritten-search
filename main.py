@@ -33,7 +33,7 @@ adapter = QdrantAdapter()
 # Pydantic models for request validation
 class CollectionCreate(BaseModel):
     collection_name: str
-    dimension: int = 384
+    dimension: int = 1024
     metric: str = "cosine"
 
 
