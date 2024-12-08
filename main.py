@@ -21,7 +21,7 @@ processor = AutoProcessor.from_pretrained(
 )
 
 embedding_model = EmbeddingModel.from_pretrained_onnx(
-    WhichModel.Bert, ONNXModel.AllMiniLML12V2
+    WhichModel.Jina, ONNXModel.JINAV3
 )
 sparse_model = EmbeddingModel.from_pretrained_hf(
     WhichModel.SparseBert, "prithivida/Splade_PP_en_v1"
