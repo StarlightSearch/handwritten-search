@@ -261,7 +261,7 @@ class MainWindow(QMainWindow):
 
     def refresh_collections(self):
         try:
-            response = requests.get("http://127.0.0.1:8000/qdrant/collections", timeout=5)
+            response = requests.get("http://127.0.0.1:8000/collections", timeout=5)
             if response.status_code == 200:
                 collections = response.json()["collections"]
                 current_text = self.collection_combo.currentText()

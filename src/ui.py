@@ -16,7 +16,7 @@ with st.sidebar:
     st.header("Collection Management")
     
     # Get existing collections from Qdrant
-    response = requests.get(f"{API_URL}/qdrant/collections")
+    response = requests.get(f"{API_URL}/collections")
     collections = []
     if response.status_code == 200:
         collections = response.json()["collections"]

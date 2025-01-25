@@ -1,15 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-from qdrant_client.models import Distance
 
 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
 from embed_anything import embed_query, EmbeddingModel, ONNXModel, WhichModel
 
-from api.qdrant_adapter import QdrantAdapter
-from qdrant_client.models import SparseVector
+from api.lancedb_adapter import LanceDBAdapter
 import numpy as np
+
 app = FastAPI()
 
 # Initialize models
@@ -20,14 +19,14 @@ processor = AutoProcessor.from_pretrained(
     "Qwen/Qwen2-VL-2B-Instruct", min_pixels=256 * 28 * 28, max_pixels=512 * 28 * 28
 )
 
-embedding_model = EmbeddingModel.from_pretrained_onnx(
-    WhichModel.Jina, ONNXModel.JINAV3
+embedding_model = EmbeddingModel.from_pretrained_hf(
+    WhichModel.Jina, "jinaai/jina-embeddings-v2-base-en"
 )
 sparse_model = EmbeddingModel.from_pretrained_hf(
     WhichModel.SparseBert, "prithivida/Splade_PP_en_v1"
 )
 
-adapter = QdrantAdapter()
+adapter = LanceDBAdapter()
 
 
 # Pydantic models for request validation
@@ -54,15 +53,9 @@ class CollectionDelete(BaseModel):
 @app.post("/collections/create")
 async def create_collection(request: CollectionCreate):
     try:
-        if adapter.client.collection_exists(request.collection_name):
-            raise HTTPException(status_code=400, detail="Collection already exists")
-
-        metric = (
-            Distance.COSINE if request.metric.lower() == "cosine" else Distance.EUCLID
-        )
         adapter.create_index(
             dimension=request.dimension,
-            metric=metric,
+            metric=request.metric,
             index_name=request.collection_name,
         )
         return {"message": f"Collection {request.collection_name} created successfully"}
@@ -82,7 +75,10 @@ async def process_file(request: FileProcess):
                         "type": "image",
                         "image": request.file_path,
                     },
-                    {"type": "text", "text": "Transcribe this image. Just give the transcription, no other information."},
+                    {
+                        "type": "text",
+                        "text": "Transcribe this image. Just give the transcription, no other information.",
+                    },
                 ],
             }
         ]
@@ -142,13 +138,14 @@ async def search(request: SearchQuery):
     try:
         dense_query_embedding = embed_query([request.query], embedding_model)
         sparse_query_embedding = embed_query([request.query], sparse_model)
-        query_sparse_embeddings = get_sparse_embedding(sparse_query_embedding[0].embedding)
+        query_sparse_embeddings = get_sparse_embedding(
+            sparse_query_embedding[0].embedding
+        )
 
-        query_sparse_embeddings = SparseVector(
-        indices=query_sparse_embeddings["indices"],
-        values=query_sparse_embeddings["values"],
-    )
-
+        query_sparse_embeddings = SimpleNamespace(
+            indices=query_sparse_embeddings["indices"],
+            values=query_sparse_embeddings["values"],
+        )
 
         results = adapter.search_hybrid(
             collection_name=request.collection_name,
@@ -173,21 +170,17 @@ async def search(request: SearchQuery):
 @app.delete("/collections/delete")
 async def delete_collection(request: CollectionDelete):
     try:
-        if not adapter.client.collection_exists(request.collection_name):
-            raise HTTPException(status_code=404, detail="Collection does not exist")
-        
-        adapter.client.delete_collection(collection_name=request.collection_name)
+        adapter.db.drop_table(request.collection_name)
         return {"message": f"Collection {request.collection_name} deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/qdrant/collections")
+@app.get("/collections")
 async def list_collections():
     try:
-        collections = adapter.client.get_collections().collections
-        collection_names = [collection.name for collection in collections]
-        return {"collections": collection_names}
+        collections = adapter.db.table_names()
+        return {"collections": collections}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -211,7 +204,12 @@ def get_sparse_embedding(embedding):
     # Create a dictionary with lists of indices and values
     non_zero_terms = {
         "indices": non_zero_indices.tolist(),
-        "values": non_zero_values.tolist()
+        "values": non_zero_values.tolist(),
     }
 
     return non_zero_terms
+
+
+class SimpleNamespace:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
