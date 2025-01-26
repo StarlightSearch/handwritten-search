@@ -1,10 +1,10 @@
 import sys
 import threading
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
-                            QWidget, QLabel, QFileDialog, QLineEdit, QComboBox, 
+                            QWidget, QLabel, QFileDialog, QLineEdit, 
                             QTextEdit, QMessageBox, QHBoxLayout, QGroupBox, QScrollArea,
                             QFrame)
-from PyQt6.QtCore import QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import QThread, pyqtSignal
 import uvicorn
 import requests
 import json
@@ -72,37 +72,17 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # Collection management group
-        collection_group = QGroupBox("Collection Management")
-        collection_layout = QVBoxLayout()
+        # Data management group
+        data_group = QGroupBox("Data Management")
+        data_layout = QHBoxLayout()
         
-        # Collection selector row
-        selector_layout = QHBoxLayout()
-        self.collection_combo = QComboBox()
-        self.collection_combo.setMinimumWidth(300)
-        self.collection_combo.setPlaceholderText("Select collection")
-        selector_layout.addWidget(self.collection_combo)
+        self.refresh_btn = QPushButton("Refresh Data")
+        self.refresh_btn.clicked.connect(self.refresh_data)
+        data_layout.addWidget(self.refresh_btn)
+        data_layout.addStretch()
         
-        self.refresh_collections_btn = QPushButton("Refresh")
-        self.refresh_collections_btn.setMaximumWidth(100)
-        self.refresh_collections_btn.clicked.connect(self.refresh_collections)
-        selector_layout.addWidget(self.refresh_collections_btn)
-        collection_layout.addLayout(selector_layout)
-        
-        # New collection row
-        new_collection_layout = QHBoxLayout()
-        self.collection_name = QLineEdit()
-        self.collection_name.setPlaceholderText("New collection name")
-        new_collection_layout.addWidget(self.collection_name)
-        
-        self.create_collection_btn = QPushButton("Create Collection")
-        self.create_collection_btn.setMaximumWidth(150)
-        self.create_collection_btn.clicked.connect(self.create_collection)
-        new_collection_layout.addWidget(self.create_collection_btn)
-        collection_layout.addLayout(new_collection_layout)
-        
-        collection_group.setLayout(collection_layout)
-        layout.addWidget(collection_group)
+        data_group.setLayout(data_layout)
+        layout.addWidget(data_group)
 
         # File processing group
         processing_group = QGroupBox("File Processing")
@@ -164,15 +144,10 @@ class MainWindow(QMainWindow):
         results_group.setLayout(results_layout)
         layout.addWidget(results_group)
 
-        # Start the server and load collections
+        # Start the server
         self.server_thread = ServerThread()
         self.server_thread.error_signal.connect(self.show_error)
         self.server_thread.start()
-        
-        # Initial collection load
-        self.retry_count = 0
-        self.max_retries = 3
-        QTimer.singleShot(5000, self.try_refresh_collections)
 
         # Set stylesheet for better appearance
         self.setStyleSheet("""
@@ -236,20 +211,6 @@ class MainWindow(QMainWindow):
             }
         """)
 
-    def try_refresh_collections(self):
-        try:
-            self.refresh_collections()
-        except Exception as e:
-            if self.retry_count < self.max_retries:
-                self.retry_count += 1
-                QTimer.singleShot(2000, self.try_refresh_collections)  # Retry after 2 seconds
-            else:
-                QMessageBox.warning(
-                    self, 
-                    "Connection Error", 
-                    "Could not connect to server. Please check if the server is running."
-                )
-
     def show_error(self, error_message):
         QMessageBox.critical(self, "Error", error_message)
 
@@ -259,57 +220,15 @@ class MainWindow(QMainWindow):
         if file_name:
             self.file_path.setText(file_name)
 
-    def refresh_collections(self):
-        try:
-            response = requests.get("http://127.0.0.1:8000/collections", timeout=5)
-            if response.status_code == 200:
-                collections = response.json()["collections"]
-                current_text = self.collection_combo.currentText()
-                
-                self.collection_combo.clear()
-                self.collection_combo.addItems(collections)
-                
-                # Restore previous selection if it still exists
-                index = self.collection_combo.findText(current_text)
-                if index >= 0:
-                    self.collection_combo.setCurrentIndex(index)
-            else:
-                QMessageBox.warning(self, "Error", "Failed to fetch collections")
-        except requests.exceptions.ConnectionError:
-            raise Exception("Server not ready")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-
-    def get_current_collection(self):
-        """Get the current collection name from either the combo box or text input"""
-        return self.collection_combo.currentText() or self.collection_name.text()
-
-    def create_collection(self):
-        try:
-            response = requests.post(
-                "http://127.0.0.1:8000/collections/create",
-                json={"collection_name": self.collection_name.text()}
-            )
-            if response.status_code == 200:
-                QMessageBox.information(self, "Success", "Collection created successfully")
-                self.refresh_collections()
-            else:
-                QMessageBox.warning(self, "Error", response.json()["detail"])
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-
     def process_file(self):
         try:
             response = requests.post(
                 "http://127.0.0.1:8000/process",
-                json={
-                    "file_path": self.file_path.text(),
-                    "collection_name": self.get_current_collection()
-                }
+                json={"file_path": self.file_path.text()}
             )
             if response.status_code == 200:
                 result = response.json()
-                self.results_display.setText(f"Processed text: {result['text']}")
+                QMessageBox.information(self, "Success", f"Processed text: {result['text']}")
             else:
                 QMessageBox.warning(self, "Error", response.json()["detail"])
         except Exception as e:
@@ -319,10 +238,7 @@ class MainWindow(QMainWindow):
         try:
             response = requests.post(
                 "http://127.0.0.1:8000/search",
-                json={
-                    "query": self.search_query.text(),
-                    "collection_name": self.get_current_collection()
-                }
+                json={"query": self.search_query.text()}
             )
             if response.status_code == 200:
                 results = response.json()["results"]
@@ -342,6 +258,25 @@ class MainWindow(QMainWindow):
                 self.results_layout.addStretch()
             else:
                 QMessageBox.warning(self, "Error", response.json()["detail"])
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    def refresh_data(self):
+        try:
+            if QMessageBox.question(
+                self,
+                "Confirm Refresh",
+                "This will delete all saved data. Are you sure?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            ) == QMessageBox.StandardButton.Yes:
+                response = requests.delete(
+                    "http://127.0.0.1:8000/collections/delete",
+                    json={"collection_name": ""}  # Empty string as we don't use collection_name
+                )
+                if response.status_code == 200:
+                    QMessageBox.information(self, "Success", "All data cleared successfully")
+                else:
+                    QMessageBox.warning(self, "Error", response.json()["detail"])
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 

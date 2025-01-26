@@ -1,62 +1,23 @@
 import streamlit as st
 import requests
-import os
 from PIL import Image
-from streamlit_file_browser import st_file_browser
+import os
 
 API_URL = "http://localhost:8000"
 
-if 'current_collection' not in st.session_state:
-    st.session_state.current_collection = None
-
 st.title("Image Processing and Search System")
 
-# Sidebar for collection management
-with st.sidebar:
-    st.header("Collection Management")
-    
-    # Get existing collections from Qdrant
-    response = requests.get(f"{API_URL}/collections")
-    collections = []
-    if response.status_code == 200:
-        collections = response.json()["collections"]
-    
-    # Collection Selector
-    st.subheader("Select Collection")
-    selected_collection = st.selectbox(
-        "Choose a collection",
-        options=collections,
-        index=0 if st.session_state.current_collection is None 
-        else collections.index(st.session_state.current_collection)
+# Data Management
+st.header("Data Management")
+if st.button("Refresh Data", type="secondary"):
+    response = requests.delete(
+        f"{API_URL}/collections/delete",
+        json={"collection_name": ""}  # Empty string as we don't use collection_name
     )
-    
-    if selected_collection:
-        st.session_state.current_collection = selected_collection
-    
-    # Create Collection
-    st.subheader("Create Collection")
-    collection_name = st.text_input("Collection Name")
-    if st.button("Create Collection"):
-        response = requests.post(
-            f"{API_URL}/collections/create",
-            json={"collection_name": collection_name}
-        )
-        if response.status_code == 200:
-            st.success(response.json()["message"])
-        else:
-            st.error(response.json()["detail"])
-    
-    # Delete Collection
-    st.subheader("Delete Collection")
-    if st.button("Delete Collection"):
-        response = requests.delete(
-            f"{API_URL}/collections/delete",
-            json={"collection_name": st.session_state.current_collection}
-        )
-        if response.status_code == 200:
-            st.success(response.json()["message"])
-        else:
-            st.error(response.json()["detail"])
+    if response.status_code == 200:
+        st.success("All data cleared successfully")
+    else:
+        st.error(response.json()["detail"])
 
 # Main content
 tab1, tab2 = st.tabs(["Process Images", "Search"])
@@ -64,13 +25,15 @@ tab1, tab2 = st.tabs(["Process Images", "Search"])
 # Process Images Tab
 with tab1:
     st.header("Process Images")
-    
     uploaded_file = st.file_uploader("Choose an image", type=["png", "jpg", "jpeg"])
     
     if uploaded_file is not None:
         # Display the uploaded image
         image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded Image", use_container_width=True)
+        
+        # Create temp directory if it doesn't exist
+        os.makedirs("temp", exist_ok=True)
         
         # Save the uploaded file temporarily
         temp_path = f"temp/temp_{uploaded_file.name}"
@@ -80,10 +43,7 @@ with tab1:
         if st.button("Process Image"):
             response = requests.post(
                 f"{API_URL}/process",
-                json={
-                    "file_path": temp_path,
-                    "collection_name": st.session_state.current_collection
-                }
+                json={"file_path": temp_path}
             )
             
             if response.status_code == 200:
@@ -103,10 +63,7 @@ with tab2:
     if st.button("Search"):
         response = requests.post(
             f"{API_URL}/search",
-            json={
-                "query": search_query,
-                "collection_name": st.session_state.current_collection
-            }
+            json={"query": search_query}
         )
         
         if response.status_code == 200:

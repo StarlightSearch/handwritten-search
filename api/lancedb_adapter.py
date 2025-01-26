@@ -4,28 +4,34 @@ from embed_anything import Adapter, EmbedData
 from typing import List, Dict
 import numpy as np
 import uuid
+import pyarrow as pa
 
 class LanceDBAdapter(Adapter):
     def __init__(self):
         self.db = lancedb.connect("data/lancedb")
+        self._init_table()
+
+    def _init_table(self):
+        schema = pa.schema([
+            ("id", pa.string()),
+            ("vector", pa.list_(pa.float32(), 1024)),  # Default dimension, will be updated on first create
+            ("sparse_indices", pa.list_(pa.int64())),
+            ("sparse_values", pa.list_(pa.float32())),
+            ("text", pa.string()),
+            ("file_path", pa.string())
+        ])
+        self.db.create_table("vectors", schema=schema, exist_ok=True)
 
     def delete_index(self, index_name):
-        self.db.drop_table(index_name)
+        # We use this method to clear all data, ignoring the index_name parameter
+        table = self.db["vectors"]
+        table.delete("1=1")  # Delete all rows
 
     def create_index(self, dimension, metric, index_name):
-        schema = {
-            "id": "string",
-            "vector": f"vector({dimension})",
-            "sparse_indices": "list<int64>",
-            "sparse_values": "list<float32>",
-            "text": "string",
-            "file_path": "string"
-        }
-        
-        if not self.db.table_exists(index_name):
-            self.db.create_table(index_name, schema=schema)
+        # Stub method required by Adapter interface
+        pass
 
-    def convert(self, embeddings: List[EmbedData], sparse_embeddings: List[EmbedData]) -> List[Dict]:
+    def convert(self, embeddings: List[EmbedData], sparse_embeddings: List[EmbedData], index_name: str) -> List[Dict]:
         points = []
         for i, embedding in enumerate(embeddings):
             sparse_embedding = get_sparse_embedding(sparse_embeddings[i].embedding)
@@ -40,26 +46,46 @@ class LanceDBAdapter(Adapter):
         return points
 
     def upsert(self, data: List[EmbedData], sparse_data: List[EmbedData], index_name: str) -> None:
-        points = self.convert(data, sparse_data)
-        table = self.db[index_name]
+        points = self.convert(data, sparse_data, index_name)
+        table = self.db["vectors"]
         table.add(points)
 
     def search_hybrid(self, collection_name: str, query_vector: List[float], query_sparse_vector) -> List[Dict]:
-        table = self.db[collection_name]
+        table = self.db["vectors"]
         
         # Perform dense vector search
-        dense_results = table.search(query_vector).limit(20).to_list()
+        dense_results = (table.search(query_vector)
+                        .limit(20)
+                        .to_list())
         
         # Perform sparse vector search using dot product of sparse vectors
-        sparse_results = table.search(
+        sparse_results = (table.search(
             query_vector=query_sparse_vector.values,
             vector_column_name="sparse_values",
             query_type="sparse"
-        ).limit(20).to_list()
+        )
+        .limit(20)
+        .to_list())
         
         # Combine results using RRF (Reciprocal Rank Fusion)
         all_results = self._combine_results_rrf(dense_results, sparse_results)
         return SimpleNamespace(points=all_results)
+
+    def search(self, collection_name: str, query_vector: List[float]):
+        table = self.db["vectors"]
+        results = (table.search(query_vector)
+                  .limit(20)
+                  .to_list())
+        return SimpleNamespace(
+            points=[
+                SimpleNamespace(
+                    id=r["id"],
+                    payload={"text": r["text"], "file_path": r["file_path"]},
+                    score=r["_distance"]
+                )
+                for r in results
+            ]
+        )
 
     def _combine_results_rrf(self, dense_results, sparse_results, k=60):
         # Create a dictionary to store combined scores
@@ -95,20 +121,6 @@ class LanceDBAdapter(Adapter):
         )
         
         return sorted_results
-
-    def search(self, collection_name: str, query_vector: List[float]):
-        table = self.db[collection_name]
-        results = table.search(query_vector).limit(20).to_list()
-        return SimpleNamespace(
-            points=[
-                SimpleNamespace(
-                    id=r["id"],
-                    payload={"text": r["text"], "file_path": r["file_path"]},
-                    score=r["_distance"]
-                )
-                for r in results
-            ]
-        )
 
 def get_sparse_embedding(embedding):
     # Convert the embedding to a NumPy array

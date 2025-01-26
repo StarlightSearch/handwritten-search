@@ -1,13 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
 
 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
-from embed_anything import embed_query, EmbeddingModel, ONNXModel, WhichModel
+from embed_anything import embed_query, EmbeddingModel, WhichModel
 
-from api.lancedb_adapter import LanceDBAdapter
+from api.lancedb_adapter import LanceDBAdapter, SimpleNamespace
 import numpy as np
+import uvicorn
 
 app = FastAPI()
 
@@ -28,40 +28,15 @@ sparse_model = EmbeddingModel.from_pretrained_hf(
 
 adapter = LanceDBAdapter()
 
-
 # Pydantic models for request validation
-class CollectionCreate(BaseModel):
-    collection_name: str
-    dimension: int = 1024
-    metric: str = "cosine"
-
-
 class FileProcess(BaseModel):
     file_path: str
-    collection_name: str
-
 
 class SearchQuery(BaseModel):
     query: str
-    collection_name: str
-
 
 class CollectionDelete(BaseModel):
     collection_name: str
-
-
-@app.post("/collections/create")
-async def create_collection(request: CollectionCreate):
-    try:
-        adapter.create_index(
-            dimension=request.dimension,
-            metric=request.metric,
-            index_name=request.collection_name,
-        )
-        return {"message": f"Collection {request.collection_name} created successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/process")
 async def process_file(request: FileProcess):
@@ -121,7 +96,7 @@ async def process_file(request: FileProcess):
         adapter.upsert(
             data=dense_embedding,
             sparse_data=sparse_embedding,
-            index_name=request.collection_name,
+            index_name=""  # Empty string as we don't use the index_name parameter
         )
 
         return {
@@ -131,7 +106,6 @@ async def process_file(request: FileProcess):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/search")
 async def search(request: SearchQuery):
@@ -148,7 +122,7 @@ async def search(request: SearchQuery):
         )
 
         results = adapter.search_hybrid(
-            collection_name=request.collection_name,
+            collection_name="",  # Empty string as we don't use the collection_name parameter
             query_vector=dense_query_embedding[0].embedding,
             query_sparse_vector=query_sparse_embeddings,
         )
@@ -166,30 +140,16 @@ async def search(request: SearchQuery):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.delete("/collections/delete")
 async def delete_collection(request: CollectionDelete):
     try:
-        adapter.db.drop_table(request.collection_name)
-        return {"message": f"Collection {request.collection_name} deleted successfully"}
+        adapter.delete_index("")  # Empty string as we don't use the index_name parameter
+        return {"message": "All data cleared successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/collections")
-async def list_collections():
-    try:
-        collections = adapter.db.table_names()
-        return {"collections": collections}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 if __name__ == "__main__":
-    import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
 
 def get_sparse_embedding(embedding):
     # Convert the embedding to a NumPy array
@@ -208,8 +168,3 @@ def get_sparse_embedding(embedding):
     }
 
     return non_zero_terms
-
-
-class SimpleNamespace:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
