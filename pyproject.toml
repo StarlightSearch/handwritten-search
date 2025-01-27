@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "An API to search handwritten applications. Uses VLM as OCR model and EmbedAnything for embedding generation and Qdrant for vector database"
 authors = ["Akshay Ballal <arballal95@gmail.com>"]
 readme = "README.md"
+packages = [
+    { include = "search-handwritten" },
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"

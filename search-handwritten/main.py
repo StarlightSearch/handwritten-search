@@ -20,14 +20,11 @@ st.title("Image Processing and Search System")
 # Data Management
 st.header("Data Management")
 if st.button("Refresh Data", type="secondary"):
-    response = requests.delete(
-        f"{API_URL}/collections/delete",
-        json={"collection_name": ""}  # Empty string as we don't use collection_name
-    )
-    if response.status_code == 200:
+    try:
+        adapter.delete_index("")  # Empty string as we don't use index_name
         st.success("All data cleared successfully")
-    else:
-        st.error(response.json()["detail"])
+    except Exception as e:
+        st.error(str(e))
 
 # Main content
 tab1, tab2 = st.tabs(["Process Images", "Search"])
