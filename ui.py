@@ -5,17 +5,13 @@ import os
 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
 from embed_anything import embed_query, EmbeddingModel, WhichModel
-from api.lancedb_adapter import LanceDBAdapter, SimpleNamespace
-import numpy as np
+from api.lancedb_adapter import LanceDBAdapter
 
 API_URL = "http://localhost:8000"
 
 # Initialize embedding models
 embedding_model = EmbeddingModel.from_pretrained_hf(
     WhichModel.Jina, "jinaai/jina-embeddings-v2-base-en"
-)
-sparse_model = EmbeddingModel.from_pretrained_hf(
-    WhichModel.SparseBert, "prithivida/Splade_PP_en_v1"
 )
 adapter = LanceDBAdapter()
 
@@ -110,7 +106,6 @@ with tab1:
 
                     # Create embeddings
                     dense_embedding = embed_query(output_text, embedding_model)
-                    sparse_embedding = embed_query(output_text, sparse_model)
                     dense_embedding[0].metadata = {
                         "text": output_text[0],
                         "file_path": temp_path,
@@ -119,8 +114,8 @@ with tab1:
                     # Upsert to database
                     adapter.upsert(
                         data=dense_embedding,
-                        sparse_data=sparse_embedding,
-                        index_name=""  # Empty string as we don't use the index_name parameter
+                        sparse_data=[],  # Empty list since we don't use sparse embeddings
+                        index_name=""
                     )
 
                 st.success("Image processed successfully!")
@@ -139,20 +134,11 @@ with tab2:
     if st.button("Search"):
         try:
             with st.spinner("Searching..."):
-                dense_query_embedding = embed_query([search_query], embedding_model)
-                sparse_query_embedding = embed_query([search_query], sparse_model)
+                query_embedding = embed_query([search_query], embedding_model)
                 
-                # Get sparse values
-                embedding_array = np.array(sparse_query_embedding[0].embedding)
-                non_zero_values = embedding_array[np.nonzero(embedding_array)[0]]
-                query_sparse_embeddings = SimpleNamespace(
-                    values=non_zero_values.tolist()
-                )
-
-                results = adapter.search_hybrid(
+                results = adapter.search(
                     collection_name="",
-                    query_vector=dense_query_embedding[0].embedding,
-                    query_sparse_vector=query_sparse_embeddings
+                    query_vector=query_embedding[0].embedding
                 )
 
                 for idx, result in enumerate(results.points, 1):
