@@ -12,13 +12,13 @@ A powerful application for searching through handwritten documents using advance
 ## Prerequisites
 
 - Python 3.11 or higher
-- Poetry for dependency management
+- [Poetry](https://python-poetry.org/docs/#installation) for dependency management
 
 ## Installation
 
 Install dependencies using Poetry:
 ```bash
-poetry install --no-root
+poetry install
 ```
 
 ## Usage
