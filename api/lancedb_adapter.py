@@ -14,7 +14,7 @@ class LanceDBAdapter(Adapter):
     def _init_table(self):
         schema = pa.schema([
             ("id", pa.string()),
-            ("vector", pa.list_(pa.float32(), 1024)),  # Default dimension, will be updated on first create
+            ("vector", pa.list_(pa.float32())),  # Changed to variable-sized list
             ("sparse_indices", pa.list_(pa.int64())),
             ("sparse_values", pa.list_(pa.float32())),
             ("text", pa.string()),

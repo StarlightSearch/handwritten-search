@@ -19,7 +19,7 @@ A powerful application for searching through handwritten documents using advance
 
 Install dependencies using Poetry:
 ```bash
-poetry install
+poetry install --no-root
 ```
 
 ## Usage
@@ -33,7 +33,7 @@ poetry run uvicorn main:app --reload
 ### Running the Desktop Application
 
 ```bash
-poetry run streamlit run desktop_app.py
+poetry run streamlit run src/ui.py
 ```
 
 ## API Endpoints

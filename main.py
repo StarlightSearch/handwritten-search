@@ -29,83 +29,11 @@ sparse_model = EmbeddingModel.from_pretrained_hf(
 adapter = LanceDBAdapter()
 
 # Pydantic models for request validation
-class FileProcess(BaseModel):
-    file_path: str
-
 class SearchQuery(BaseModel):
     query: str
 
 class CollectionDelete(BaseModel):
     collection_name: str
-
-@app.post("/process")
-async def process_file(request: FileProcess):
-    try:
-        # Prepare messages for Qwen model
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "image": request.file_path,
-                    },
-                    {
-                        "type": "text",
-                        "text": "Transcribe this image. Just give the transcription, no other information.",
-                    },
-                ],
-            }
-        ]
-
-        # Process with Qwen
-        text = processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-        image_inputs, video_inputs = process_vision_info(messages)
-        inputs = processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
-        )
-        inputs = inputs.to("cuda")
-
-        # Generate text
-        generated_ids = qwen_model.generate(**inputs, max_new_tokens=128)
-        generated_ids_trimmed = [
-            out_ids[len(in_ids) :]
-            for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-        ]
-        output_text = processor.batch_decode(
-            generated_ids_trimmed,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        )
-
-        # Create embeddings
-        dense_embedding = embed_query(output_text, embedding_model)
-        sparse_embedding = embed_query(output_text, sparse_model)
-        dense_embedding[0].metadata = {
-            "text": output_text[0],
-            "file_path": request.file_path,
-        }
-
-        # Upsert to database
-        adapter.upsert(
-            data=dense_embedding,
-            sparse_data=sparse_embedding,
-            index_name=""  # Empty string as we don't use the index_name parameter
-        )
-
-        return {
-            "message": "File processed and stored successfully",
-            "text": output_text[0],
-            "file_path": request.file_path,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/search")
 async def search(request: SearchQuery):
