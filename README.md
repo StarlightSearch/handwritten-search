@@ -1,5 +1,9 @@
 # Handwritten Search
 
+> Click on the image below to view the demo.
+
+[![Youtube Video](https://github.com/user-attachments/assets/1902e5f0-fc1e-458c-b248-3b0c2b3cf067)](https://www.youtube.com/watch?v=TDSDH8EQnUY)
+
 A powerful application for searching through handwritten documents using advanced Vision Language Models (VLM) and vector search capabilities. This project combines state-of-the-art OCR using Qwen-VL with efficient vector search using LanceDB.
 
 ## Features
