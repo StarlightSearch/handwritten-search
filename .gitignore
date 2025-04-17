@@ -4,3 +4,4 @@ temp
 build
 dist
 data/
+tauri-app/.env.sh
