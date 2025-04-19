@@ -1,32 +1,23 @@
+---
+context: This is a blog post about the Handwritten Document Search App. Don't use references to the codebase while generating responses to any queries run on this document. Use simple language and avoid using multiple clauses in a single sentence.
+---
+
 # Handwritten Document Search App
 
 In the world of digital information, we're still limited by our ability to search through our physical notes. Now, through the power of Vision Models and Embeddings, we can finally make this a reality. In this article, we're going to use the Qwen vision model via Huggingface Transformers to extract text from handwritten documents and then use the Embed-Anything pipeline to embed the text and store it in a vector database.
 
 ## System Workflow
 
-1. **Image Upload** - Users submit handwritten documents through Streamlit interface  
-2. **Qwen-VL Processing** - Vision Language Model extracts text with chat-style OCR prompts  
-3. **Embed-Anything Pipeline** - Generates dense embeddings while preserving document metadata  
-4. **LanceDB Storage** - Vector database stores embeddings with columnar optimization  
-5. **Query Handling** - Natural language input converts to embedding via same pipeline  
-6. **Semantic Search** - LanceDB performs nearest neighbor search on 768D vectors  
-7. **Result Ranking** - Hybrid scoring returns most relevant documents with original text excerpts  
+The app runs on Streamlit for the UI. We first accept the user's handwritten images from their a file picker. Once uploaded, these documents are processed by a Vision Language Model (Qwen-VL) via Transformers that specializes in handwriting recognition. The extracted text then flows through the Embed-Anything pipeline, which transforms the raw text into vector embeddings while storing the text and filepath as metadata. 
+
+These embeddings are stored in LanceDB, a vector database which runs locally, like SQLite. This enables fast retrieval and searching capabilities, avoiding network latency. When users want to search through their documents, they can input natural language queries - which undergo the same embedding process. LanceDB then performs nearest neighbor search operations on these vectors to find the most semantically similar documents.
 
 ## Core Technologies
 
-### 1. Vision Processing with Qwen-VL
+### 1. Vision Processing with Huggingface Transformers
 
 - Specialized VLM for handwritten text extraction (2B parameter model)
 - Implements chat-style OCR prompts for accurate transcription:
-
-```54:59:search-handwritten/main.py
-                    qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
-                        "Qwen/Qwen2-VL-2B-Instruct", torch_dtype="float16", device_map="auto"
-                    )
-                    processor = AutoProcessor.from_pretrained(
-                        "Qwen/Qwen2-VL-2B-Instruct", min_pixels=256 * 28 * 28, max_pixels=512 * 28 * 28
-                    )
-```
 
 ### 2. Embedding Generation Pipeline
 
@@ -35,25 +26,12 @@ In the world of digital information, we're still limited by our ability to searc
   - Batch processing
   - Metadata handling
 
-```13:15:search-handwritten/main.py
-embedding_model = EmbeddingModel.from_pretrained_hf(
-    WhichModel.Jina, "jinaai/jina-embeddings-v2-base-en"
-)
-```
-
 ### 3. Vector Search Infrastructure
 
 - **LanceDB integration** through custom adapter pattern:
   - Columnar storage for fast retrieval
   - Hybrid search capabilities
   - Native Python SDK integration
-
-```44:47:search-handwritten/api/lancedb_adapter.py
-    def upsert(self, data: List[EmbedData], sparse_data: List[EmbedData], index_name: str) -> None:
-        points = self.convert(data, sparse_data, index_name)
-        table = self.db["vectors"]
-        table.add(points)
-```
 
 ## Key Design Decisions
 
@@ -71,12 +49,6 @@ embedding_model = EmbeddingModel.from_pretrained_hf(
 
 - Text+image metadata preservation
 - Automatic schema management
-
-## Performance Characteristics
-
-- 768-dimension embeddings (Jina v2 base)
-- LanceDB's SIMD-optimized search
-- Async-ready architecture
 
 ## Implementation Challenges
 
