@@ -16,9 +16,9 @@ async fn embed_ocr_text(file_path: String) -> Result<String, String> {
     // Get API credentials from environment variables
     println!("🔑 Fetching API credentials...");
     let account_id = env::var("CLOUDFLARE_ACCOUNT_ID")
-        .map_err(|_| "❌ CLOUDFLARE_ACCOUNT_ID not found in environment variables")?;
+        .expect("❌ CLOUDFLARE_ACCOUNT_ID not found in environment variables");
     let api_key = env::var("API_KEY")
-        .map_err(|_| "❌ API_KEY not found in environment variables")?;
+        .expect("❌ API_KEY not found in environment variables");
     println!("✅ API credentials retrieved successfully");
 
     // Read the image file
