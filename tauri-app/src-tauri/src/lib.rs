@@ -1,13 +1,76 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 use std::fs;
 use std::env;
 use reqwest::Client;
 use serde_json::json;
+use embed_anything::embed_query;
+use embed_anything::embeddings::embed::{Embedder, TextEmbedder};
+use embed_anything::embeddings::local::jina::JinaEmbedder;
+
+// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+#[tauri::command]
+async fn greet(name: &str) -> Result<String, String> {
+    println!("🔍 Starting greet function with name: {}", name);
+    
+    println!("⏳ Attempting to create Jina embedder...");
+    let embedder = match std::panic::catch_unwind(|| {
+        println!("  Creating Jina embedder object...");
+        let result = Embedder::Text(TextEmbedder::Jina(Box::new(JinaEmbedder::default())));
+        println!("  Jina embedder created successfully");
+        result
+    }) {
+        Ok(embedder) => embedder,
+        Err(e) => {
+            let error_msg = format!("❌ Failed to create embedder: {:?}", e);
+            println!("{}", error_msg);
+            return Err(error_msg);
+        }
+    };
+    println!("✅ Embedder created successfully");
+    
+    println!("⏳ Attempting to generate embedding...");
+    let embedding_result = match std::panic::catch_unwind(|| {
+        println!("  Will call embed_query next...");
+        true // Just to indicate we reached this point without panicking
+    }) {
+        Ok(_) => {
+            println!("  Calling embed_query...");
+            match embed_query(&[name], &embedder, None).await {
+                Ok(embedding) => {
+                    println!("  Embedding generated successfully");
+                    Ok(embedding)
+                },
+                Err(e) => {
+                    let error_msg = format!("❌ embed_query returned an error: {:?}", e);
+                    println!("{}", error_msg);
+                    Err(error_msg)
+                }
+            }
+        },
+        Err(e) => {
+            let error_msg = format!("❌ Panic before embed_query call: {:?}", e);
+            println!("{}", error_msg);
+            Err(error_msg)
+        }
+    };
+    
+    // Process the result
+    let embedding = match embedding_result {
+        Ok(emb) => emb,
+        Err(e) => return Err(e),
+    };
+    
+    println!("✅ Embedding generated successfully");
+    println!("📊 Embedding data count: {}", embedding.len());
+    
+    if !embedding.is_empty() {
+        println!("💡 First embedding info: {:?}", embedding[0]);
+    }
+    
+    let result = format!("Hello, {}! Your embedding has been generated with {} vectors", name, embedding.len());
+    println!("📝 Final result: {}", result);
+    
+    Ok(result)
+}
 
 #[tauri::command]
 async fn embed_ocr_text(file_path: String) -> Result<String, String> {
