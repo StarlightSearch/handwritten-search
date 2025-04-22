@@ -1,3 +1,5 @@
+pub mod lancedb_adapter;
+
 use std::fs;
 use std::env;
 use reqwest::Client;
@@ -5,6 +7,7 @@ use serde_json::json;
 use embed_anything::embed_query;
 use embed_anything::embeddings::embed::{Embedder, TextEmbedder};
 use embed_anything::embeddings::local::jina::JinaEmbedder;
+use crate::lancedb_adapter::LanceDBAdapter;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -158,7 +161,30 @@ async fn embed_ocr_text(file_path: String) -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize the LanceDB adapter
+    let adapter = tauri::async_runtime::block_on(async {
+        // Use a relative path for the database.
+        // Consider using tauri::api::path::app_data_dir for a more robust location.
+        let adapter_result = LanceDBAdapter::new("./lancedb").await;
+        match adapter_result {
+            Ok(adapter) => {
+                println!("✅ LanceDB Adapter initialized successfully.");
+                // Optionally, create the table immediately if needed
+                // match adapter.create_table("vectors").await {
+                //     Ok(_) => println!("✅ LanceDB 'vectors' table ensured."),
+                //     Err(e) => eprintln!("❌ Failed to create LanceDB table: {}", e),
+                // };
+                adapter
+            }
+            Err(e) => {
+                // Handle error appropriately, e.g., log and exit or panic
+                panic!("❌ Failed to initialize LanceDB Adapter: {}", e);
+            }
+        }
+    });
+
     tauri::Builder::default()
+        .manage(adapter) // Add the adapter to Tauri's managed state
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
