@@ -144,42 +144,40 @@ async fn embed_ocr_text(app: AppHandle, file_path: String) -> Result<String, Str
 
     // Make API call to Cloudflare
     println!("🚀 Sending request to Cloudflare API...");
-    // let response = client
-    //     .post(format!("https://api.cloudflare.com/client/v4/accounts/{}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct", account_id))
-    //     .header("Authorization", format!("Bearer {}", api_key))
-    //     .header("Content-Type", "application/json")
-    //     .json(&json!({
-    //         "prompt": "Please extract the text from the provided image. Do not include any formatting, explanations, or descriptions. Only provide the plain text contained in the image.",
-    //         "image": image_array
-    //     }))
-    //     .send()
-    //     .await
-    //     .map_err(|e| format!("❌ Failed to send request: {}", e))?;
-    // println!("✅ Request sent successfully (Status: {})", response.status());
+    let response = client
+        .post(format!("https://api.cloudflare.com/client/v4/accounts/{}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct", account_id))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&json!({
+            "prompt": "Please extract the text from the provided image. Do not include any formatting, explanations, or descriptions. Only provide the plain text contained in the image.",
+            "image": image_array
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("❌ Failed to send request: {}", e))?;
+    println!("✅ Request sent successfully (Status: {})", response.status());
 
     // Parse response
-    // println!("📥 Parsing API response...");
-    // let result = response
-    //     .json::<serde_json::Value>()
-    //     .await
-    //     .map_err(|e| format!("❌ Failed to parse response: {}", e))?;
+    println!("📥 Parsing API response...");
+    let result = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("❌ Failed to parse response: {}", e))?;
     
     // Print the full JSON response for debugging
-    // println!("📄 Full JSON response:");
-    // println!("{}", serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Failed to pretty print JSON".to_string()));
+    println!("📄 Full JSON response:");
+    println!("{}", serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Failed to pretty print JSON".to_string()));
 
-    // let text = result["result"]["response"]
-    //     .as_str()
-    //     .ok_or_else(|| {
-    //         let error_msg = format!(
-    //             "❌ Failed to extract text from response. Response structure: {}",
-    //             serde_json::to_string(&result).unwrap_or_else(|_| "Failed to serialize response".to_string())
-    //         );
-    //         println!("{}", error_msg);
-    //         error_msg
-    //     })?;
-
-    let text = "Hello, world! How's it going?".to_string();
+    let text = result["result"]["response"]
+        .as_str()
+        .ok_or_else(|| {
+            let error_msg = format!(
+                "❌ Failed to extract text from response. Response structure: {}",
+                serde_json::to_string(&result).unwrap_or_else(|_| "Failed to serialize response".to_string())
+            );
+            println!("{}", error_msg);
+            error_msg
+        })?;
     
     println!("📝 Extracted text length: {} characters", text.len());
 
