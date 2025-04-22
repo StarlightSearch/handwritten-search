@@ -8,6 +8,7 @@ use embed_anything::embed_query;
 use embed_anything::embeddings::embed::{Embedder, TextEmbedder};
 use embed_anything::embeddings::local::jina::JinaEmbedder;
 use crate::lancedb_adapter::LanceDBAdapter;
+use tauri::Manager;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -127,13 +128,8 @@ async fn embed_ocr_text(file_path: String) -> Result<String, String> {
     // Print the full JSON response for debugging
     println!("📄 Full JSON response:");
     println!("{}", serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Failed to pretty print JSON".to_string()));
-    
-    println!("✅ Response parsed successfully");
 
-    // Extract the text from the response
-    println!("🔍 Extracting text from response...");
-    println!("🔍 Checking result structure...");
-    println!("- Has 'result' field: {}", result.get("result").is_some());
+    println!("Has 'result' field: {}", result.get("result").is_some());
     if let Some(result_field) = result.get("result") {
         println!("- Has 'response' field: {}", result_field.get("response").is_some());
         if let Some(response_field) = result_field.get("response") {
@@ -164,20 +160,38 @@ pub fn run() {
     // Initialize the LanceDB adapter
     let adapter = tauri::async_runtime::block_on(async {
         // Use a relative path for the database.
-        // Consider using tauri::api::path::app_data_dir for a more robust location.
-        let adapter_result = LanceDBAdapter::new("./lancedb").await;
+        let db_uri = "./lancedb";
+        println!("⏳ Initializing LanceDB Adapter at: {}", db_uri);
+        let adapter_result = LanceDBAdapter::new(db_uri).await;
         match adapter_result {
             Ok(adapter) => {
                 println!("✅ LanceDB Adapter initialized successfully.");
-                // Optionally, create the table immediately if needed
-                // match adapter.create_table("vectors").await {
-                //     Ok(_) => println!("✅ LanceDB 'vectors' table ensured."),
-                //     Err(e) => eprintln!("❌ Failed to create LanceDB table: {}", e),
-                // };
-                adapter
+                
+                // Ensure the default table exists
+                let table_name = "vectors";
+                println!("⏳ Checking for LanceDB table: '{}'", table_name);
+                match adapter.db.table_names().execute().await {
+                    Ok(names) => {
+                        if !names.contains(&table_name.to_string()) {
+                            println!("  Table '{}' not found. Creating...", table_name);
+                            match adapter.create_table(table_name).await {
+                                Ok(_) => println!("  ✅ Table '{}' created successfully.", table_name),
+                                Err(e) => eprintln!("  ❌ Failed to create LanceDB table '{}': {}", table_name, e),
+                            }
+                        } else {
+                            println!("  ✅ Table '{}' already exists.", table_name);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to get LanceDB table names: {}", e);
+                        // Decide if we should panic or continue without the table
+                        // Panicking might be safer if the table is essential
+                        panic!("Failed to verify table existence: {}", e);
+                    }
+                }
+                adapter // Return the initialized adapter
             }
             Err(e) => {
-                // Handle error appropriately, e.g., log and exit or panic
                 panic!("❌ Failed to initialize LanceDB Adapter: {}", e);
             }
         }
