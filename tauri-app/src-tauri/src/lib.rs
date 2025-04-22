@@ -7,8 +7,8 @@ use serde_json::json;
 use embed_anything::embed_query;
 use embed_anything::embeddings::embed::{Embedder, TextEmbedder};
 use embed_anything::embeddings::local::jina::JinaEmbedder;
-use crate::lancedb_adapter::LanceDBAdapter;
-use tauri::Manager;
+use crate::lancedb_adapter::{LanceDBAdapter, DataPoint, SearchResult};
+use tauri::{Manager, AppHandle};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -77,7 +77,46 @@ async fn greet(name: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn embed_ocr_text(file_path: String) -> Result<String, String> {
+async fn search_text(app: AppHandle, query: String) -> Result<Vec<SearchResult>, String> {
+    println!("🔍 Starting search for query: {}", query);
+    
+    // Get the adapter from Tauri's managed state
+    let adapter = app.state::<LanceDBAdapter>().inner();
+
+    // Generate embedding for the query
+    println!("⏳ Generating embedding for query...");
+    let embedder = match std::panic::catch_unwind(|| {
+        Embedder::Text(TextEmbedder::Jina(Box::new(JinaEmbedder::default())))
+    }) {
+        Ok(embedder) => embedder,
+        Err(e) => return Err(format!("❌ Failed to create embedder: {:?}", e)),
+    };
+
+    let embedding = match embed_query(&[&query], &embedder, None).await {
+        Ok(emb) => emb,
+        Err(e) => return Err(format!("❌ Failed to generate embedding: {:?}", e)),
+    };
+
+    if embedding.is_empty() {
+        return Err("❌ No embedding generated".to_string());
+    }
+
+    // Convert embedding to Vec<f32>
+    let vector = embedding[0].embedding.to_dense().unwrap().to_vec();
+
+    // Perform the search
+    println!("🔎 Performing vector search...");
+    match adapter.search("vectors", vector, Some(10)).await {
+        Ok(results) => {
+            println!("✅ Search completed successfully");
+            Ok(results)
+        },
+        Err(e) => Err(format!("❌ Search failed: {:?}", e)),
+    }
+}
+
+#[tauri::command]
+async fn embed_ocr_text(app: AppHandle, file_path: String) -> Result<String, String> {
     println!("🔍 Starting OCR process for file: {}", file_path);
 
     // Get API credentials from environment variables
@@ -105,54 +144,89 @@ async fn embed_ocr_text(file_path: String) -> Result<String, String> {
 
     // Make API call to Cloudflare
     println!("🚀 Sending request to Cloudflare API...");
-    let response = client
-        .post(format!("https://api.cloudflare.com/client/v4/accounts/{}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct", account_id))
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .json(&json!({
-            "prompt": "Please extract the text from the provided image. Do not include any formatting, explanations, or descriptions. Only provide the plain text contained in the image.",
-            "image": image_array
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("❌ Failed to send request: {}", e))?;
-    println!("✅ Request sent successfully (Status: {})", response.status());
+    // let response = client
+    //     .post(format!("https://api.cloudflare.com/client/v4/accounts/{}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct", account_id))
+    //     .header("Authorization", format!("Bearer {}", api_key))
+    //     .header("Content-Type", "application/json")
+    //     .json(&json!({
+    //         "prompt": "Please extract the text from the provided image. Do not include any formatting, explanations, or descriptions. Only provide the plain text contained in the image.",
+    //         "image": image_array
+    //     }))
+    //     .send()
+    //     .await
+    //     .map_err(|e| format!("❌ Failed to send request: {}", e))?;
+    // println!("✅ Request sent successfully (Status: {})", response.status());
 
     // Parse response
-    println!("📥 Parsing API response...");
-    let result = response
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("❌ Failed to parse response: {}", e))?;
+    // println!("📥 Parsing API response...");
+    // let result = response
+    //     .json::<serde_json::Value>()
+    //     .await
+    //     .map_err(|e| format!("❌ Failed to parse response: {}", e))?;
     
     // Print the full JSON response for debugging
-    println!("📄 Full JSON response:");
-    println!("{}", serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Failed to pretty print JSON".to_string()));
+    // println!("📄 Full JSON response:");
+    // println!("{}", serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Failed to pretty print JSON".to_string()));
 
-    println!("Has 'result' field: {}", result.get("result").is_some());
-    if let Some(result_field) = result.get("result") {
-        println!("- Has 'response' field: {}", result_field.get("response").is_some());
-        if let Some(response_field) = result_field.get("response") {
-            println!("- Response type: {}", response_field);
-        }
+    // let text = result["result"]["response"]
+    //     .as_str()
+    //     .ok_or_else(|| {
+    //         let error_msg = format!(
+    //             "❌ Failed to extract text from response. Response structure: {}",
+    //             serde_json::to_string(&result).unwrap_or_else(|_| "Failed to serialize response".to_string())
+    //         );
+    //         println!("{}", error_msg);
+    //         error_msg
+    //     })?;
+
+    let text = "Hello, world! How's it going?".to_string();
+    
+    println!("📝 Extracted text length: {} characters", text.len());
+
+    // Generate embedding for the extracted text
+    println!("⏳ Generating embedding for extracted text...");
+    let embedder = match std::panic::catch_unwind(|| {
+        Embedder::Text(TextEmbedder::Jina(Box::new(JinaEmbedder::default())))
+    }) {
+        Ok(embedder) => embedder,
+        Err(e) => return Err(format!("❌ Failed to create embedder: {:?}", e)),
+    };
+
+    let embedding = match embed_query(&[&text], &embedder, None).await {
+        Ok(emb) => emb,
+        Err(e) => return Err(format!("❌ Failed to generate embedding: {:?}", e)),
+    };
+
+    if embedding.is_empty() {
+        return Err("❌ No embedding generated".to_string());
     }
 
-    let text = result["result"]["response"]
-        .as_str()
-        .ok_or_else(|| {
-            let error_msg = format!(
-                "❌ Failed to extract text from response. Response structure: {}",
-                serde_json::to_string(&result).unwrap_or_else(|_| "Failed to serialize response".to_string())
-            );
-            println!("{}", error_msg);
-            error_msg
-        })?;
-    
-    println!("✅ Text extracted successfully");
-    println!("📝 Extracted text length: {} characters", text.len());
-    println!("📝 Extracted text: {}", text);
+    println!("📊 Embedding dimension: {}", embedding[0].embedding.to_dense().unwrap().len());
 
-    Ok(text.to_string())
+    // Get the adapter from Tauri's managed state
+    let adapter = app.state::<LanceDBAdapter>().inner();
+
+    // Convert embedding to Vec<f32>
+    let vector = embedding[0].embedding.to_dense().unwrap().to_vec();
+
+    // Create data point and upsert
+    let data_point = DataPoint {
+        file_path: file_path.clone(),
+        text: text.to_string(),
+        vector,
+    };
+
+    println!("💾 Upserting embedding to LanceDB...");
+    match adapter.upsert("vectors", vec![data_point]).await {
+        Ok(_) => {
+            println!("✅ Embedding upserted successfully");
+            Ok(text.to_string())
+        },
+        Err(e) => {
+            println!("❌ Failed to upsert embedding: {:?}", e);
+            Err(format!("❌ Failed to upsert embedding: {:?}", e))
+        },
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -184,12 +258,10 @@ pub fn run() {
                     }
                     Err(e) => {
                         eprintln!("❌ Failed to get LanceDB table names: {}", e);
-                        // Decide if we should panic or continue without the table
-                        // Panicking might be safer if the table is essential
                         panic!("Failed to verify table existence: {}", e);
                     }
                 }
-                adapter // Return the initialized adapter
+                adapter
             }
             Err(e) => {
                 panic!("❌ Failed to initialize LanceDB Adapter: {}", e);
@@ -198,12 +270,12 @@ pub fn run() {
     });
 
     tauri::Builder::default()
-        .manage(adapter) // Add the adapter to Tauri's managed state
+        .manage(adapter)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, embed_ocr_text])
+        .invoke_handler(tauri::generate_handler![greet, embed_ocr_text, search_text])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

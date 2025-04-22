@@ -2,7 +2,12 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { openPath } from '@tauri-apps/plugin-opener';
+
+interface SearchResult {
+  file_path: string;
+  text: string;
+}
 
 function App() {
   const [selectedFileName, setSelectedFileName] = useState("");
@@ -41,9 +46,11 @@ function App() {
         const result = await invoke("embed_ocr_text", {
           filePath: selectedFileName
         });
+        setTranscriptionResult(result as string);
         console.log("Embedding result:", result);
       } catch (err) {
         console.error("Processing failed:", err);
+        setTranscriptionResult(null);
       } finally {
         setIsProcessing(false);
       }
@@ -54,13 +61,11 @@ function App() {
     e.preventDefault();
     setIsSearching(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/search/test?query=${encodeURIComponent(
-          searchQuery
-        )}`
-      );
-      const data = await response.json();
-      setSearchResults(data);
+      const results = await invoke<SearchResult[]>("search_text", { query: searchQuery });
+      setSearchResults(results.map((result: SearchResult) => ({
+        file_path: result.file_path,
+        text: result.text
+      })));
     } catch (err) {
       console.error("Search failed:", err);
     } finally {
@@ -70,7 +75,8 @@ function App() {
 
   async function openResultFile(filePath: string) {
     try {
-      await shellOpen(filePath);
+      console.log("Opening file:", filePath);
+      await openPath(filePath);
     } catch (err) {
       console.error("Failed to open file:", err);
     }

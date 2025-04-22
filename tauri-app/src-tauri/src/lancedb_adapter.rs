@@ -7,10 +7,11 @@ use futures::TryStreamExt;
 use lancedb::connection::Connection;
 use lancedb::query::{ExecutableQuery, QueryBase};
 use lancedb::{connect, DistanceType, Result, Table as LanceDbTable};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-const VECTOR_DIMENSION: i32 = 768;
+const VECTOR_DIMENSION: i32 = 512;
 
 #[derive(Debug, Clone)]
 pub struct DataPoint {
@@ -19,7 +20,7 @@ pub struct DataPoint {
     pub vector: Vec<f32>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub id: String,
     pub file_path: String,
@@ -105,13 +106,23 @@ impl LanceDBAdapter {
     }
 
     pub async fn upsert(&self, table_name: &str, data_points: Vec<DataPoint>) -> Result<()> {
+        println!("📝 Number of data points to upsert: {}", data_points.len());
         let table = self.db.open_table(table_name).execute().await?;
+
+        println!("🔄 Converting data to Arrow format...");
         let (data, schema) = Self::convert_data_to_arrow(data_points).await?;
+        println!("📊 Record batch schema: {:?}", schema);
+
+        println!("📦 Creating record batch iterator...");
         let reader = Box::new(RecordBatchIterator::new(
             vec![data].into_iter().map(Ok),
             schema,
         ));
+
+        println!("💾 Adding data to table...");
         table.add(reader).execute().await?;
+        println!("✅ Data successfully added to table");
+
         Ok(())
     }
 

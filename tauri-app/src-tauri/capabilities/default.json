@@ -10,6 +10,15 @@
     "opener:default",
     "fs:default",
     "shell:default",
-    "dialog:default"
+    "shell:allow-open",
+    "dialog:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        {
+          "path": "/Users/**"
+        }
+      ]
+    }
   ]
 }
