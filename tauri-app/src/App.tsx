@@ -2,7 +2,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { openPath } from '@tauri-apps/plugin-opener';
+import { openPath } from "@tauri-apps/plugin-opener";
 
 interface SearchResult {
   file_path: string;
@@ -44,7 +44,7 @@ function App() {
       setIsProcessing(true);
       try {
         const result = await invoke("embed_ocr_text", {
-          filePath: selectedFileName
+          filePath: selectedFileName,
         });
         setTranscriptionResult(result as string);
         console.log("Embedding result:", result);
@@ -61,11 +61,15 @@ function App() {
     e.preventDefault();
     setIsSearching(true);
     try {
-      const results = await invoke<SearchResult[]>("search_text", { query: searchQuery });
-      setSearchResults(results.map((result: SearchResult) => ({
-        file_path: result.file_path,
-        text: result.text
-      })));
+      const results = await invoke<SearchResult[]>("search_text", {
+        query: searchQuery,
+      });
+      setSearchResults(
+        results.map((result: SearchResult) => ({
+          file_path: result.file_path,
+          text: result.text,
+        }))
+      );
     } catch (err) {
       console.error("Search failed:", err);
     } finally {
@@ -97,24 +101,9 @@ function App() {
             >
               Open File
             </button>
-            <button
-              onClick={async () => {
-                try {
-                  const result = await invoke("greet", { name: "Test" });
-                  console.log("Greet result:", result);
-                } catch (err) {
-                  console.error("Greet failed:", err);
-                }
-              }}
-              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm"
-            >
-              Test Tauri Command
-            </button>
-            {selectedFileName && (
-              <span className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded">
-                {selectedFileName}
-              </span>
-            )}
+            <span className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded">
+              {selectedFileName || "No file selected"}
+            </span>
           </div>
 
           <button
@@ -189,6 +178,13 @@ function App() {
             </div>
           )}
         </div>
+
+        <a
+          href="/slides/Slide1_1"
+          className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm text-center my-2"
+        >
+          Next
+        </a>
       </div>
     </main>
   );
